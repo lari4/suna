@@ -380,3 +380,331 @@ File is saved with the new content, preserving all unmodified sections.
 
 ---
 
+## Voice Call Pipeline
+
+**Description:** End-to-end workflow for making AI-powered phone calls with real-time transcription, safety validation, and call monitoring.
+
+**Input:**
+- Phone number (any format)
+- First message (greeting)
+- Optional system prompt
+
+**Output:**
+- Call initiated with call_id
+- Real-time transcript
+- Call completion report
+
+### Pipeline Flow
+
+```
+User: "Call +1-415-555-1234 and introduce yourself"
+      |
+      v
+┌──────────────────────────────────────────┐
+│  make_phone_call Tool Invocation          │
+│  Parameters:                              │
+│  - phone_number: "+1-415-555-1234"        │
+│  - first_message: "Hello, I'm calling..." │
+│  - system_prompt: (optional)              │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 1: Phone Number Normalization       │
+│                                           │
+│  normalize_phone_number()                 │
+│  - Parse with phonenumbers library        │
+│  - Try multiple strategies:               │
+│    * Explicit + prefix                    │
+│    * Regional parsing (US, GB, IN...)     │
+│    * 00 prefix conversion                 │
+│  - Validate: is_valid_number()            │
+│  - Extract country info                   │
+│                                           │
+│  Output:                                  │
+│  - E.164 format: "+14155551234"           │
+│  - Country code: "1"                      │
+│  - Country name: "United States"          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 2: Safety Validation                │
+│                                           │
+│  validate_call_safety()                   │
+│                                           │
+│  Check 1: Emergency Number Detection      │
+│  - Compare against EMERGENCY_NUMBERS      │
+│  - Match EMERGENCY_PATTERNS               │
+│  - Block: 911, 999, 112, 000, etc.       │
+│                                           │
+│  Check 2: Content Safety (First Message) │
+│  - Scan for PROHIBITED_KEYWORDS           │
+│    (illegal, scam, fraud, threat...)      │
+│  - Detect scam patterns:                  │
+│    * Urgent payment requests              │
+│    * Verification of sensitive info       │
+│    * Prize/lottery claims                 │
+│    * Government impersonation             │
+│                                           │
+│  Check 3: Content Safety (System Prompt) │
+│  - Same validation as first message       │
+│                                           │
+│  If any check fails → BLOCK CALL          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 3: Prompt Enhancement               │
+│                                           │
+│  Build Enhanced System Prompt:            │
+│                                           │
+│  1. Base Prompt (user or default)         │
+│     DEFAULT_SYSTEM_PROMPT:                │
+│     "You are a professional AI assistant  │
+│      making a phone call. Be natural,     │
+│      conversational, concise..."          │
+│                                           │
+│  2. + Country Context                     │
+│     "You are calling {country_name}       │
+│      (code +{country_code}).              │
+│      Be aware of cultural differences,    │
+│      time zones, language preferences."   │
+│                                           │
+│  3. + Safety Guidelines (MANDATORY)       │
+│     "ETHICAL GUIDELINES:                  │
+│      - NEVER request SSN, passwords,      │
+│        credit cards, bank accounts        │
+│      - NEVER discuss illegal activities   │
+│      - NEVER impersonate government       │
+│      - NEVER create urgency               │
+│      - NEVER request payments             │
+│      - Be honest about being AI"          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 4: VAPI Configuration               │
+│                                           │
+│  vapi_config.get_assistant_config()       │
+│                                           │
+│  {                                        │
+│    "firstMessage": enhanced_first_msg,    │
+│    "model": {                             │
+│      "provider": "openai",                │
+│      "model": "gpt-5-mini",               │
+│      "temperature": 0.7,                  │
+│      "messages": [{                       │
+│        "role": "system",                  │
+│        "content": enhanced_system_prompt  │
+│      }]                                   │
+│    },                                     │
+│    "voice": {                             │
+│      "provider": "playht",                │
+│      "voiceId": "jennifer-playht"         │
+│    },                                     │
+│    "transcriber": {                       │
+│      "provider": "deepgram",              │
+│      "model": "nova-2",                   │
+│      "language": "en",                    │
+│      "smartFormat": true                  │
+│    },                                     │
+│    "maxDurationSeconds": 600              │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 5: Initiate Call via VAPI           │
+│                                           │
+│  POST https://api.vapi.ai/call/phone      │
+│  {                                        │
+│    "phoneNumberId": VAPI_PHONE_NUMBER_ID, │
+│    "customer": {                          │
+│      "number": "+14155551234"             │
+│    },                                     │
+│    "assistant": assistant_config          │
+│  }                                        │
+│                                           │
+│  Response:                                │
+│  {                                        │
+│    "id": "call_abc123...",                │
+│    "status": "queued",                    │
+│    "createdAt": "2025-01-..."             │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 6: Database Recording               │
+│                                           │
+│  Store in vapi_calls table:               │
+│  {                                        │
+│    "call_id": "call_abc123...",           │
+│    "agent_id": current_agent_id,          │
+│    "thread_id": current_thread_id,        │
+│    "phone_number": "+14155551234",        │
+│    "direction": "outbound",               │
+│    "status": "queued",                    │
+│    "transcript": [],                      │
+│    "started_at": timestamp                │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 7: Thread Message                   │
+│                                           │
+│  Add message to conversation:             │
+│  "📞 Initiating call to +14155551234      │
+│   🌍 Country: United States               │
+│   Call ID: call_abc1...                   │
+│   The conversation will appear here       │
+│   in real-time."                          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Return Success                           │
+│  {                                        │
+│    "call_id": "call_abc123...",           │
+│    "status": "queued",                    │
+│    "phone_number": "+14155551234",        │
+│    "country": "United States",            │
+│    "next_action": "MONITOR_CALL",         │
+│    "instructions": "Use                   │
+│     wait_for_call_completion..."          │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Agent calls wait_for_call_completion     │
+│  Parameters:                              │
+│  - call_id: "call_abc123..."              │
+│  - check_interval: 2 seconds              │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  MONITORING LOOP (Every 2 seconds)        │
+│                                           │
+│  Query vapi_calls table:                  │
+│  - Check status (queued → ringing →      │
+│                   in-progress → ended)    │
+│  - Get transcript updates                 │
+│                                           │
+│  If new transcript messages:              │
+│  - Stream to conversation thread:         │
+│    "🤖 AI: Hello, I'm calling..."         │
+│    "👤 Caller: Hi, who is this?"          │
+│    "🤖 AI: I'm an AI assistant..."        │
+│                                           │
+│  Continue until status ∈ [ended,          │
+│   completed, failed, error]               │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  CALL COMPLETION                          │
+│                                           │
+│  Calculate metrics:                       │
+│  - Duration: 127 seconds                  │
+│  - Cost: $0.10 (base + trans + voice +    │
+│           model costs)                    │
+│  - Credits: $0.10 * TOKEN_PRICE_MULT      │
+│                                           │
+│  Add completion message:                  │
+│  "📞 Call Completed                       │
+│   Status: ended                           │
+│   Duration: 127 seconds                   │
+│   Credits Used: $0.4000"                  │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Return Final ToolResult                  │
+│  {                                        │
+│    "call_id": "call_abc123...",           │
+│    "final_status": "ended",               │
+│    "duration_seconds": 127,               │
+│    "transcript_messages": 8,              │
+│    "cost": 0.10,                          │
+│    "message": "Call completed..."         │
+│  }                                        │
+└──────────────────────────────────────────┘
+```
+
+### Data Flow Example
+
+**Initial Request:**
+```python
+{
+  "phone_number": "415-555-1234",
+  "first_message": "Hello, I'm calling from Acme Corp to discuss your recent inquiry",
+  "system_prompt": "You are a friendly customer service representative"
+}
+```
+
+**After Normalization:**
+```python
+{
+  "normalized_phone": "+14155551234",
+  "country_code": "1",
+  "country_name": "United States"
+}
+```
+
+**Enhanced System Prompt:**
+```
+You are a friendly customer service representative
+
+IMPORTANT: You are calling a phone number in United States (country code +1). Please be aware of potential cultural differences, time zones, and language preferences.
+
+ETHICAL GUIDELINES (MANDATORY):
+- NEVER request sensitive personal information (SSN, passwords, credit card numbers, bank accounts, PINs)
+- NEVER discuss illegal activities, threats, or emergency services
+- NEVER impersonate government agencies, law enforcement, or financial institutions
+- NEVER create urgency to manipulate the recipient into taking immediate action
+- NEVER request payments, transfers, or financial transactions
+- Be respectful, honest, and transparent about being an AI assistant
+```
+
+**Live Transcript Stream:**
+```
+[00:01] 🤖 AI: Hello, I'm calling from Acme Corp to discuss your recent inquiry
+[00:05] 👤 Caller: Oh yes, I was asking about your pricing
+[00:08] 🤖 AI: Of course! I'd be happy to help with that
+[00:12] 👤 Caller: What are your current rates?
+[00:15] 🤖 AI: Our basic plan starts at $29 per month
+...
+[02:07] 👤 Caller: Great, thank you for the information
+[02:10] 🤖 AI: You're welcome! Have a great day
+[02:12] Call ended
+```
+
+### Safety Features
+
+**Automatic Blocking:**
+- Emergency numbers (911, 999, 112, etc.)
+- Content with prohibited keywords
+- Scam pattern detection
+- Sensitive information requests
+
+**Real-time Monitoring:**
+- Call status updates every 2 seconds
+- Live transcript streaming
+- Error detection and handling
+- Automatic timeout after 1 hour
+
+**Cost Control:**
+- Per-minute billing: $0.10/minute total
+  - Base: $0.05/min
+  - Transcription: $0.01/min
+  - Voice: $0.02/min
+  - Model: $0.02/min
+- Maximum duration: 10 minutes (configurable)
+- Cost tracking and reporting
+
+---
+
