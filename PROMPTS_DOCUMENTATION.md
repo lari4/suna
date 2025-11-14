@@ -373,3 +373,192 @@ PROHIBITED_KEYWORDS = [
 
 ---
 
+## Utility & Generation Prompts
+
+### 5. Agent Name and System Prompt Generation
+
+**File Location:** `backend/core/agent_setup.py`
+
+**Purpose:** Generates AI agent names and system prompts from natural language descriptions. Used during agent creation to automatically configure agent identity and behavior.
+
+**Model Used:** OpenAI GPT-5-nano-2025-08-07
+
+**Temperature:** 0.7
+
+**Max Tokens:** 2000
+
+**Response Format:** JSON Object
+
+**System Prompt:**
+
+```python
+"""You are an AI worker configuration expert. Generate a name and system prompt for an AI worker.
+
+Respond with JSON:
+{"name": "Worker Name (2-4 words)", "system_prompt": "Detailed instructions for the worker's role and behavior"}
+
+Example:
+{"name": "Research Assistant", "system_prompt": "Act as an expert research assistant. Help users find and analyze information. Always verify facts and cite sources clearly."}"""
+```
+
+**User Message Template:**
+```python
+f"Generate name and system prompt for:\n\n{description}"
+```
+
+**Output Format:**
+```json
+{
+  "name": "Worker Name (2-4 words)",
+  "system_prompt": "Detailed instructions for the worker's role and behavior"
+}
+```
+
+**Fallback Values:**
+```python
+{
+    "name": "Custom Assistant",
+    "system_prompt": f"Act as a helpful AI assistant. {description}"
+}
+```
+
+**Usage Context:**
+- Triggered during agent creation from user description
+- Runs in parallel with icon/color generation for performance
+- Provides automatic agent configuration based on user intent
+
+---
+
+### 6. Icon and Color Scheme Generation
+
+**File Location:** `backend/core/utils/icon_generator.py`
+
+**Purpose:** Generates appropriate icons and color schemes for agents and projects using AI-powered selection from predefined Lucide React icon set and color palette.
+
+**Model Used:** OpenAI GPT-5-nano-2025-08-07
+
+**Temperature:** 0.7
+
+**Max Tokens:** 4000
+
+**Response Format:** JSON Object
+
+**Available Assets:**
+- **Icons:** 400+ Lucide React icons (accessibility, activity, bot, rocket, etc.)
+- **Colors:** 15 predefined hex colors including #000000, #FFFFFF, #6366F1, #10B981, #F59E0B, #EF4444, #8B5CF6, #EC4899, #14B8A6, #F97316, etc.
+
+**System Prompt:**
+
+```python
+f"""You are a helpful assistant that selects appropriate icons and colors for AI agents based on their name and description.
+
+Available Lucide React icons to choose from:
+{', '.join(RELEVANT_ICONS)}
+
+Available colors (hex codes):
+{', '.join(frontend_colors)}
+
+Respond with a JSON object containing:
+- "icon": The most appropriate icon name from the available icons
+- "background_color": A background color hex code from the available colors
+- "text_color": A text color hex code from the available colors (choose one that contrasts well with the background)
+
+Example response:
+{{"icon": "youtube", "background_color": "#EF4444", "text_color": "#FFFFFF"}}"""
+```
+
+**User Message Template:**
+```python
+f"Select the most appropriate icon and color scheme for this AI agent:\nName: {name}\nDescription: {description}"
+```
+
+**Output Format:**
+```json
+{
+  "icon": "bot",
+  "background_color": "#6366F1",
+  "text_color": "#FFFFFF"
+}
+```
+
+**Fallback Values:**
+```python
+{
+    "icon_name": "bot",
+    "icon_color": "#FFFFFF",
+    "icon_background": "#6366F1"
+}
+```
+
+**Validation:**
+- Icon names are validated against RELEVANT_ICONS list
+- Color hex codes are validated against frontend_colors list
+- Invalid selections fallback to safe defaults
+
+**Usage Context:**
+- Used during agent creation to provide visual identity
+- Runs in parallel with name/prompt generation
+- Provides consistent branding across the platform
+
+---
+
+### 7. Project Name and Icon Generation
+
+**File Location:** `backend/core/utils/project_helpers.py`
+
+**Purpose:** Generates concise project names (2-4 words) and selects appropriate icons for chat threads/projects based on the initial user message. Runs as a background task after project creation.
+
+**Model Used:** OpenAI GPT-5-nano-2025-08-07
+
+**Temperature:** 0.7
+
+**Max Tokens:** 1000
+
+**Response Format:** JSON Object
+
+**System Prompt:**
+
+```python
+f"""You are a helpful assistant that generates extremely concise titles (2-4 words maximum) and selects appropriate icons for chat threads based on the user's message.
+
+Available Lucide React icons to choose from:
+{', '.join(relevant_icons)}
+
+Respond with a JSON object containing:
+- "title": A concise 2-4 word title for the thread
+- "icon": The most appropriate icon name from the list above
+
+Example response:
+{{"title": "Code Review Help", "icon": "code"}}"""
+```
+
+**User Message Template:**
+```python
+f"Generate an extremely brief title (2-4 words only) and select the most appropriate icon for a chat thread that starts with this message: \"{prompt}\""
+```
+
+**Output Format:**
+```json
+{
+  "title": "Code Review Help",
+  "icon": "code"
+}
+```
+
+**Fallback Values:**
+- Default icon: "message-circle"
+- Title extracted from raw content if JSON parsing fails (limited to 50 characters)
+
+**Validation:**
+- Title is stripped of quotes and whitespace
+- Icon is validated against Lucide React icon set
+- Invalid icons default to "message-circle"
+
+**Usage Context:**
+- Runs asynchronously after project creation
+- Provides automatic naming for chat threads
+- Updates project database with generated title and icon
+- Enhances user experience with meaningful thread titles
+
+---
+
