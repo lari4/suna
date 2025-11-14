@@ -247,3 +247,129 @@ You are a full-spectrum autonomous agent capable of executing complex tasks acro
 
 ---
 
+## Voice & Communication Prompts
+
+### 3. VAPI Voice Configuration Prompts
+
+**File Location:** `backend/core/vapi_config.py`
+
+**Purpose:** Configures AI voice assistants for phone calls using the VAPI service. Defines system prompts, voice settings, model configurations, and cost calculations for voice calls.
+
+**Key Configuration:**
+- **Voice Provider:** PlayHT (default), ElevenLabs, Deepgram, OpenAI
+- **Model Provider:** OpenAI (default: gpt-5-mini), Anthropic
+- **Transcriber:** Deepgram (nova-2 model)
+- **Max Call Duration:** 600 seconds (10 minutes)
+- **Cost Structure:** $0.05/min base + $0.01/min transcription + $0.02/min voice + $0.02/min model
+
+**Usage Context:**
+- Configures AI voice assistants for making outbound phone calls
+- Provides voice and model options for different use cases
+- Calculates call costs based on duration
+
+```python
+# Default system prompt for voice calls
+DEFAULT_SYSTEM_PROMPT = """You are a professional AI assistant making a phone call. Your goals are:
+1. Be natural and conversational - speak as if you're having a real phone conversation
+2. Be concise - avoid long explanations unless specifically asked
+3. Listen actively and respond appropriately
+4. Be helpful and friendly
+5. If you don't know something, admit it honestly
+6. End the call politely when the conversation is complete"""
+
+DEFAULT_FIRST_MESSAGE = "Hello, this is an AI assistant calling. How can I help you today?"
+```
+
+**Model Configuration Default:**
+
+```python
+@dataclass
+class ModelConfig:
+    provider: str = "openai"
+    model: str = "gpt-5-mini"
+    temperature: float = 0.7
+    max_tokens: Optional[int] = None
+    messages: list = field(default_factory=lambda: [
+        {
+            "role": "system",
+            "content": "You are a helpful AI assistant on a phone call. Be concise and natural in your responses. Speak conversationally and avoid long monologues."
+        }
+    ])
+```
+
+---
+
+### 4. Voice Call Safety & Enhanced Prompts
+
+**File Location:** `backend/core/tools/vapi_voice_tool.py`
+
+**Purpose:** Implements AI voice calling functionality with comprehensive safety checks, phone number validation, and dynamic prompt enhancement based on country context. Provides tools for making calls, monitoring conversations, and retrieving transcripts.
+
+**Safety Features:**
+- **Emergency Number Blocking:** Automatically blocks calls to 911, 999, 112, and other emergency numbers
+- **Content Safety Checks:** Prevents calls with prohibited keywords (illegal activities, scams, threats)
+- **Scam Pattern Detection:** Identifies and blocks common scam patterns (urgent payment requests, fake prizes, etc.)
+- **Sensitive Information Protection:** Blocks requests for SSN, credit cards, bank accounts, passwords
+
+**Dynamic Prompt Enhancement:**
+
+When a call is initiated, the system prompt is automatically enhanced with:
+
+1. **Country Context Information:**
+```python
+country_context = f"\n\nIMPORTANT: You are calling a phone number in {country_name} (country code +{country_code}). Please be aware of potential cultural differences, time zones, and language preferences."
+```
+
+2. **Mandatory Ethical Guidelines:**
+```python
+safety_guidelines = """
+
+ETHICAL GUIDELINES (MANDATORY):
+- NEVER request sensitive personal information (SSN, passwords, credit card numbers, bank accounts, PINs)
+- NEVER discuss illegal activities, threats, or emergency services
+- NEVER impersonate government agencies, law enforcement, or financial institutions
+- NEVER create urgency to manipulate the recipient into taking immediate action
+- NEVER request payments, transfers, or financial transactions
+- Be respectful, honest, and transparent about being an AI assistant"""
+```
+
+**Full Enhanced Prompt Construction:**
+```python
+if system_prompt:
+    enhanced_system_prompt = system_prompt + country_context + safety_guidelines
+else:
+    enhanced_system_prompt = DEFAULT_SYSTEM_PROMPT + country_context + safety_guidelines
+```
+
+**Tool Functions:**
+- `make_phone_call(phone_number, first_message, system_prompt)` - Initiate outbound calls
+- `wait_for_call_completion(call_id, check_interval)` - Monitor active calls with real-time transcription
+- `get_call_details(call_id)` - Retrieve call status and transcript
+- `end_call(call_id)` - Terminate active calls
+- `list_calls(limit)` - List recent call history
+
+**Prohibited Keywords:**
+```python
+PROHIBITED_KEYWORDS = [
+    'emergency', 'ambulance', 'fire', 'police', 'suicide', 'bomb', 'threat',
+    'ransom', 'extortion', 'blackmail', 'hack', 'steal', 'fraud', 'scam',
+    'illegal', 'money laundering', 'drug', 'weapon', 'explosive', 'terrorism',
+    'attack', 'kill', 'murder', 'kidnap', 'hostage', 'swat', 'harassment',
+    'phishing', 'identity theft', 'credit card fraud', 'pyramid scheme',
+    'ponzi scheme', 'rob', 'burglary', 'assault', 'threaten', 'intimidate',
+    'coerce', 'bribe', 'corrupt', 'smuggle', 'traffick', 'launder',
+    'counterfeit', 'forge', 'fake document', 'fake id', 'social security fraud',
+    'tax evasion', 'insider trading', 'market manipulation', 'price fixing'
+]
+```
+
+**Usage Context:**
+- Real-time voice calls with AI-powered conversation
+- Automatic phone number normalization to E.164 format
+- Country detection and cultural context awareness
+- Multi-layered safety validation before call initiation
+- Live transcript streaming to conversation thread
+- Call cost tracking and billing integration
+
+---
+
