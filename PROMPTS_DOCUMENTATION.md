@@ -143,3 +143,107 @@ Event/APP-based triggers (Composio):
 
 ---
 
+### 2. Main Suna.so System Prompt
+
+**File Location:** `backend/core/prompts/prompt.py`
+
+**Purpose:** This is the comprehensive core system prompt that defines the complete identity, capabilities, and operational guidelines for Suna.so autonomous AI agents. It spans over 2300 lines and covers all aspects of agent functionality.
+
+**Major Sections:**
+
+#### 1. CORE IDENTITY & CAPABILITIES
+Defines Suna.so as an autonomous AI Worker capable of executing complex tasks across multiple domains including information gathering, content creation, software development, data analysis, and problem-solving.
+
+#### 2. EXECUTION ENVIRONMENT
+
+**2.1 Workspace Configuration:**
+- Operates in `/workspace` directory
+- All file paths must be relative (never absolute)
+- File operations expect workspace-relative paths
+
+**2.2 System Information:**
+- Python 3.11 with Debian Linux (slim)
+- Installed tools: PDF processing (poppler-utils, wkhtmltopdf), document processing (antiword, unrtf, catdoc), text processing (grep, gawk, sed), Node.js 20.x, npm, Chromium browser
+- Sudo privileges enabled
+
+**2.3 Operational Capabilities:**
+- **File Operations:** Creating, reading, modifying, deleting files; AI-powered intelligent file editing
+- **Knowledge Base Semantic Search:** `init_kb`, `search_files`, `ls_kb`, `cleanup_kb` for local files
+- **Global Knowledge Base:** `global_kb_sync`, `global_kb_create_folder`, `global_kb_upload_file`, `global_kb_list_contents`, `global_kb_delete_item`, `global_kb_enable_item`
+- **Data Processing:** Scraping, parsing (JSON, CSV, XML), cleaning, transforming datasets
+- **System Operations:** CLI commands, compression, package installation, port exposure
+- **Web Search:** Up-to-date information retrieval with images and comprehensive results
+- **Browser Automation:** Navigate, click, fill forms, extract content, screenshots, handle dynamic content
+- **Visual Input & Image Management:** `load_image` tool with 3-image context limit, intelligent image context management
+- **Web Development:** HTML/CSS/JS, modern frameworks (React, Vue), npm/yarn, build optimization
+- **Professional Design Creation:** `designer_create_or_edit` tool with 30+ platform presets (Instagram, Facebook, Twitter, LinkedIn, YouTube, etc.)
+- **Image Generation & Editing:** `image_edit_or_generate` tool for creating and modifying images
+- **Data Providers:** LinkedIn, Twitter, Zillow, Amazon, Yahoo Finance, Active Jobs
+- **Specialized Research:** People search and company search (paid tools - requires user confirmation)
+- **File Upload & Cloud Storage:** Upload files to secure cloud buckets for sharing
+
+#### 3. TOOLKIT & METHODOLOGY
+- Tool selection principles
+- CLI operations best practices
+- Code development practices
+- File management strategies
+- File editing strategies
+
+#### 4. DATA PROCESSING & EXTRACTION
+- Content extraction tools (document processing, text & data processing)
+- Regex & CLI data processing
+- Data verification & integrity
+- Web search & content extraction
+
+#### 5. TASK MANAGEMENT
+- Adaptive interaction system
+- Task list usage with TodoWrite tool
+- Execution philosophy
+- Task management cycle for complex tasks
+
+#### 6. CONTENT CREATION
+- Writing guidelines
+- Presentation creation workflow (using `sb_presentation_tool`)
+- File-based output system
+- Design guidelines
+
+#### 7. COMMUNICATION & USER INTERACTION
+- Adaptive conversational interactions
+- Adaptive communication protocols
+- Natural conversation patterns
+- Attachment protocol
+
+#### 9. COMPLETION PROTOCOLS
+- Adaptive completion rules
+
+**Key Features:**
+- **Image Context Management:** Hard limit of 3 images in context at any time (1000+ tokens per image)
+- **Browser Validation:** Every browser action provides screenshot for verification
+- **Critical Workflows:** People/company search requires mandatory clarification and user confirmation
+- **Platform Presets:** 30+ design presets for social media, advertising, and professional use
+- **Multi-turn Image Editing:** Automatic detection of follow-up image modification requests
+
+**Usage Context:**
+This is the foundational system prompt loaded for all Suna.so agents, providing complete operational instructions and guidelines.
+
+```python
+SYSTEM_PROMPT = f"""
+You are Suna.so, an autonomous AI Worker created by the Kortix team.
+
+# 1. CORE IDENTITY & CAPABILITIES
+You are a full-spectrum autonomous agent capable of executing complex tasks across domains including information gathering, content creation, software development, data analysis, and problem-solving. You have access to a Linux environment with internet connectivity, file system operations, terminal commands, web browsing, and programming runtimes.
+
+# 2. EXECUTION ENVIRONMENT
+
+## 2.1 WORKSPACE CONFIGURATION
+- WORKSPACE DIRECTORY: You are operating in the "/workspace" directory by default
+- All file paths must be relative to this directory (e.g., use "src/main.py" not "/workspace/src/main.py")
+- Never use absolute paths or paths starting with "/workspace" - always use relative paths
+- All file operations (create, read, write, delete) expect paths relative to "/workspace"
+
+[... continues for 2300+ lines covering all operational capabilities, tools, methodologies, and protocols ...]
+"""
+```
+
+---
+
