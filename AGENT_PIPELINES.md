@@ -708,3 +708,354 @@ ETHICAL GUIDELINES (MANDATORY):
 
 ---
 
+## Main Agent Execution Pipeline
+
+**Description:** Core workflow for processing user requests through the Suna.so agent system, from message reception to response generation with tool execution and context management.
+
+**Input:** User message/request
+
+**Output:** Agent response with executed tool results
+
+### High-Level Pipeline
+
+```
+User Message
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Message Reception                        │
+│  - Thread ID context                      │
+│  - Agent ID context                       │
+│  - Account ID context                     │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Load Agent Configuration                 │
+│  - System prompt (2300+ lines)            │
+│  - Agent builder prompt (if applicable)   │
+│  - Available tools                        │
+│  - Model configuration                    │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Context Management                       │
+│  - Load conversation history              │
+│  - Apply prompt caching (if supported)    │
+│  - Compress context if needed             │
+│  - Token counting                         │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Prepare Messages Array                   │
+│  [                                        │
+│    {                                      │
+│      "role": "system",                    │
+│      "content": SYSTEM_PROMPT +           │
+│                 AGENT_BUILDER_PROMPT,     │
+│      "cache_control": {"type": "ephemeral"}│
+│    },                                     │
+│    ... conversation history ...           │
+│    {                                      │
+│      "role": "user",                      │
+│      "content": current_user_message      │
+│    }                                      │
+│  ]                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  LLM API Call                             │
+│                                           │
+│  Model: claude-sonnet-4-20250514          │
+│  Provider: AWS Bedrock                    │
+│  Context Window: 200,000 tokens           │
+│  Max Output: 16,384 tokens                │
+│  Temperature: varies by use case          │
+│  Tools: AgentPress tool definitions       │
+│  Streaming: true                          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Response Processing                      │
+│                                           │
+│  IF response contains tool calls:         │
+│  ├─> Execute tools in sequence            │
+│  │   (or parallel if independent)         │
+│  ├─> Collect tool results                 │
+│  └─> Recursive LLM call with results      │
+│                                           │
+│  IF response is text only:                │
+│  └─> Return response to user              │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Tool Execution (if needed)               │
+│                                           │
+│  For each tool call:                      │
+│  1. Validate tool exists                  │
+│  2. Parse parameters                      │
+│  3. Execute tool function                 │
+│  4. Collect ToolResult                    │
+│  5. Format for next LLM call              │
+│                                           │
+│  Examples:                                │
+│  - sb_files_tool: File operations         │
+│  - sb_shell_tool: Command execution       │
+│  - browser_tool: Web automation           │
+│  - web_search_tool: Internet search       │
+│  - designer_create_or_edit: Design gen    │
+│  - image_edit_or_generate: Image gen      │
+│  - make_phone_call: Voice calls           │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Continue Until Complete                  │
+│                                           │
+│  Loop:                                    │
+│  - LLM generates tool calls               │
+│  - Tools execute                          │
+│  - Results feed back to LLM               │
+│  - Repeat until text-only response        │
+│                                           │
+│  Termination conditions:                  │
+│  - Agent returns final text response      │
+│  - Max iterations reached                 │
+│  - Error occurs                           │
+│  - User interrupts                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Response Delivery                        │
+│  - Stream response to user                │
+│  - Update conversation thread             │
+│  - Calculate token usage                  │
+│  - Track costs                            │
+│  - Log metrics                            │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Post-Processing                          │
+│  - Save message to database               │
+│  - Update thread metadata                 │
+│  - Trigger background tasks (if any)      │
+│  - Cache cleanup                          │
+└──────────────────────────────────────────┘
+```
+
+### Detailed Flow with Example
+
+**User Request:**
+```
+"Create a Python script that analyzes CSV data and generates a report"
+```
+
+**Step 1: Context Loading**
+```python
+# Load conversation history
+messages = [
+    {
+        "role": "system",
+        "content": SYSTEM_PROMPT,  # 2300+ lines of agent instructions
+        "cache_control": {"type": "ephemeral"}  # Cache for cost savings
+    }
+]
+
+# Add conversation history
+previous_messages = load_thread_history(thread_id)
+messages.extend(previous_messages)
+
+# Add current user message
+messages.append({
+    "role": "user",
+    "content": "Create a Python script that analyzes CSV data and generates a report"
+})
+```
+
+**Step 2: First LLM Call**
+```python
+# Call to Claude Sonnet 4.5
+response = await bedrock_client.invoke_model(
+    model="claude-sonnet-4-20250514",
+    messages=messages,
+    max_tokens=16384,
+    tools=agentpress_tools,  # All available tools
+    stream=True
+)
+```
+
+**Step 3: Agent Plans & Uses Tools**
+
+*LLM Response (First Turn):*
+```json
+{
+  "role": "assistant",
+  "content": "I'll create a Python script for CSV analysis. Let me start by creating the file.",
+  "tool_calls": [
+    {
+      "id": "tool_call_1",
+      "type": "function",
+      "function": {
+        "name": "create_file",
+        "arguments": {
+          "file_path": "analyze_csv.py",
+          "file_contents": "import pandas as pd\nimport matplotlib.pyplot as plt\n\ndef analyze_csv(filename):\n    df = pd.read_csv(filename)\n    # Analysis code...\n    return report"
+        }
+      }
+    }
+  ]
+}
+```
+
+**Step 4: Tool Execution**
+```python
+# Execute create_file tool
+tool_result = await sb_files_tool.create_file(
+    file_path="analyze_csv.py",
+    file_contents="..."
+)
+
+# Tool result
+{
+    "success": True,
+    "output": "File 'analyze_csv.py' created successfully."
+}
+```
+
+**Step 5: Second LLM Call (with tool results)**
+```python
+messages.append({
+    "role": "assistant",
+    "content": "I'll create a Python script...",
+    "tool_calls": [...]
+})
+
+messages.append({
+    "role": "user",
+    "tool_call_id": "tool_call_1",
+    "content": tool_result.output
+})
+
+# Another LLM call
+response = await bedrock_client.invoke_model(...)
+```
+
+*LLM Response (Second Turn):*
+```json
+{
+  "role": "assistant",
+  "content": "Great! I've created the Python script. Now let me create a sample CSV file for testing.",
+  "tool_calls": [
+    {
+      "id": "tool_call_2",
+      "type": "function",
+      "function": {
+        "name": "create_file",
+        "arguments": {
+          "file_path": "sample_data.csv",
+          "file_contents": "name,age,city\nAlice,30,NYC\nBob,25,LA\n..."
+        }
+      }
+    }
+  ]
+}
+```
+
+**Step 6: Continue Loop**
+- Execute create sample CSV
+- LLM may test the script using sb_shell_tool
+- Generate report
+- Final response to user
+
+**Step 7: Final Response**
+```json
+{
+  "role": "assistant",
+  "content": "I've created a complete CSV analysis solution for you:\n\n1. **analyze_csv.py**: Main analysis script with pandas\n2. **sample_data.csv**: Test data\n\nThe script includes:\n- Data loading and validation\n- Statistical analysis\n- Visualization generation\n- Report export\n\nYou can run it with: `python analyze_csv.py sample_data.csv`"
+}
+```
+
+### Prompt Caching Strategy
+
+**Cached Content (70-90% cost savings):**
+```python
+{
+    "role": "system",
+    "content": SYSTEM_PROMPT,  # 2300+ lines - CACHED
+    "cache_control": {"type": "ephemeral"}
+}
+
+# First request: Full cost
+# Subsequent requests within 5 minutes: 90% discount on cached portion
+```
+
+**Token Costs:**
+- System prompt: ~50,000 tokens
+- First request: $3.00/1M input tokens = $0.15
+- Cached requests: $0.30/1M cached tokens = $0.015 (90% savings!)
+
+### Tool Orchestration Patterns
+
+**Sequential Execution:**
+```
+User: "Create file, then run tests"
+  ├─> create_file("test.py", "...")
+  └─> sb_shell_tool("pytest test.py")
+```
+
+**Parallel Execution:**
+```
+User: "Search for Python tutorials and Node.js tutorials"
+  ├─> web_search("Python tutorials") ─┐
+  └─> web_search("Node.js tutorials") ─┴─> Combine results
+```
+
+**Conditional Execution:**
+```
+User: "Try to read config.json, if it doesn't exist, create it"
+  ├─> read_file("config.json")
+  │   └─> If fails:
+  │       └─> create_file("config.json", default_config)
+```
+
+**Multi-turn Planning:**
+```
+Turn 1: Agent analyzes request, breaks down into subtasks
+Turn 2: Execute task 1 (file creation)
+Turn 3: Execute task 2 (code testing)
+Turn 4: Execute task 3 (refinement)
+Turn 5: Final response with summary
+```
+
+### Context Management
+
+**Compression Triggers:**
+- Thread exceeds 150,000 tokens
+- Approaching model's context limit
+- Performance optimization needed
+
+**Compression Strategy:**
+- Keep recent messages (last 10)
+- Summarize old conversations
+- Preserve critical information
+- Maintain prompt cache
+
+**Token Budget Allocation:**
+```
+Total: 200,000 tokens
+- System prompt: 50,000 (cached)
+- Agent builder prompt: 10,000 (cached)
+- Conversation history: 100,000
+- Tool results: 20,000
+- Reserved for response: 20,000
+```
+
+---
+
