@@ -200,3 +200,183 @@ Input: "I need an agent that can help me with research and fact-checking"
 
 ---
 
+## File Editing Pipeline
+
+**Description:** AI-powered file editing using Morph-v3-large model for precise code modifications based on natural language instructions.
+
+**Input:**
+- Target file path
+- Natural language instructions
+- Code edit snippet with `// ... existing code ...` markers
+
+**Output:** Modified file with applied edits
+
+### Pipeline Flow
+
+```
+User Request: "Update function to handle error cases"
+      |
+      v
+┌─────────────────────────────────────┐
+│  Agent calls edit_file tool          │
+│  Parameters:                         │
+│  - target_file: "src/main.py"       │
+│  - instructions: "Add error handling"│
+│  - code_edit: "try/except block"     │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Read Current File Content           │
+│  - Load from sandbox filesystem      │
+│  - Validate file exists              │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Prepare Morph API Request           │
+│                                      │
+│  Format:                             │
+│  <instruction>{instructions}</instruction>
+│  <code>{file_content}</code>         │
+│  <update>{code_edit}</update>        │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Call Morph-v3-large Model           │
+│                                      │
+│  Model: morph-v3-large               │
+│  Temperature: 0.0 (deterministic)    │
+│  Timeout: 30 seconds                 │
+│  Provider: Morph API or OpenRouter   │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Response Processing                 │
+│  - Extract edited code               │
+│  - Remove markdown code blocks       │
+│  - Validate changes                  │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Write Updated Content               │
+│  - Upload to sandbox filesystem      │
+│  - Preserve file permissions         │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Return ToolResult                   │
+│  {                                   │
+│    "success": true,                  │
+│    "message": "File edited",         │
+│    "file_path": "src/main.py",       │
+│    "original_content": "...",        │
+│    "updated_content": "..."          │
+│  }                                   │
+└─────────────────────────────────────┘
+```
+
+### Data Flow Example
+
+**Step 1: Input**
+```python
+{
+  "target_file": "src/calculator.py",
+  "instructions": "Add error handling for division by zero",
+  "code_edit": """
+// ... existing code ...
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+// ... existing code ...
+"""
+}
+```
+
+**Step 2: File Content**
+```python
+# Original file content
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+def divide(a, b):
+    return a / b
+
+def multiply(a, b):
+    return a * b
+```
+
+**Step 3: Morph API Request**
+```xml
+<instruction>Add error handling for division by zero</instruction>
+<code>
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+def divide(a, b):
+    return a / b
+
+def multiply(a, b):
+    return a * b
+</code>
+<update>
+// ... existing code ...
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+// ... existing code ...
+</update>
+```
+
+**Step 4: Model Response**
+```python
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
+def multiply(a, b):
+    return a * b
+```
+
+**Step 5: Updated File**
+File is saved with the new content, preserving all unmodified sections.
+
+### Key Features
+
+**Intelligent Editing:**
+- Model understands `// ... existing code ...` markers
+- Preserves unchanged sections automatically
+- Handles multiple edits in single call
+- Context-aware code modifications
+
+**Fallback Mechanisms:**
+- TipTap document manual updates
+- Title/content/metadata field updates
+- Error message propagation
+
+**Validation:**
+- File existence check
+- Content comparison (detect no-op edits)
+- Markdown code block extraction
+
+---
+
