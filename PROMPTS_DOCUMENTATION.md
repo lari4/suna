@@ -562,3 +562,153 @@ f"Generate an extremely brief title (2-4 words only) and select the most appropr
 
 ---
 
+## Tool-Specific Prompts
+
+### 8. AI-Powered File Editing (Morph API)
+
+**File Location:** `backend/core/tools/sb_files_tool.py`
+
+**Purpose:** Uses AI to intelligently edit files based on natural language instructions and code snippets. The system employs a specialized model (Morph-v3-large) designed for precise code editing.
+
+**Model Used:** morph-v3-large (via Morph API or OpenRouter)
+
+**Temperature:** 0.0 (deterministic edits)
+
+**Timeout:** 30 seconds
+
+**Input Format:**
+```xml
+<instruction>{instructions}</instruction>
+<code>{file_content}</code>
+<update>{code_edit}</update>
+```
+
+**Tool Description:**
+
+"Use this tool to make an edit to an existing file.
+
+This will be read by a less intelligent model, which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.
+
+When writing the edit, you should specify each edit in sequence, with the special comment `// ... existing code ...` to represent unchanged code in between edited lines.
+
+**Example:**
+```
+// ... existing code ...
+FIRST_EDIT
+// ... existing code ...
+SECOND_EDIT
+// ... existing code ...
+THIRD_EDIT
+// ... existing code ...
+```
+
+**Key Guidelines:**
+- Bias towards repeating as few lines as possible
+- Provide sufficient context around edited code
+- DO NOT omit spans of code without using `// ... existing code ...`
+- For deletions, provide context before and after
+- Make all edits to a file in a single `edit_file` call
+
+**Usage Context:**
+- Preferred method for file modifications (faster than str_replace)
+- Handles multiple simultaneous edits in one file
+- Automatically extracts code from markdown code blocks
+- Falls back to manual updates for TipTap documents
+
+---
+
+## AI Model Integrations
+
+### 9. Model Registry and Configuration
+
+**File Location:** `backend/core/ai_models/registry.py`
+
+**Purpose:** Centralized registry of AI models available in the Suna.so platform with their configurations, capabilities, and cost structures.
+
+**Primary Provider:** Anthropic Claude (via AWS Bedrock in production)
+
+**Supported Providers:**
+- **Anthropic:** Claude Haiku 4.5, Claude Sonnet 4, Claude Sonnet 4.5
+- **OpenAI:** GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, GPT-5-nano
+- **Google:** Gemini models
+- **AWS Bedrock:** Anthropic Claude models
+- **OpenRouter:** Fallback for various models
+
+**Model Configurations:**
+
+**Claude Sonnet 4.5** (Primary production model):
+- Model ID: `claude-sonnet-4-20250514`
+- Bedrock ID: `us.anthropic.claude-sonnet-4-20250514-v1:0`
+- Context Window: 200,000 tokens
+- Max Output: 16,384 tokens
+- Supports: Vision, prompt caching, tools, streaming
+- Cost: Input $3.00/1M tokens, Output $15.00/1M tokens
+- Cached: Input $0.30/1M tokens, Output $15.00/1M tokens
+
+**Claude Haiku 4.5** (Fast, cost-effective):
+- Model ID: `claude-haiku-4-5-20250417`
+- Context Window: 200,000 tokens
+- Max Output: 16,384 tokens
+- Cost: Input $0.25/1M tokens, Output $1.25/1M tokens
+
+**OpenAI GPT-5-nano** (Utility tasks):
+- Model ID: `gpt-5-nano-2025-08-07`
+- Used for: Icon/color selection, name generation, project titles
+- Temperature: 0.7
+- Response Format: JSON Object
+- Context: Quick, lightweight tasks requiring structured output
+
+**LLM Service Configuration:**
+
+**File Location:** `backend/core/services/llm.py`
+
+**Purpose:** Unified LLM API interface using LiteLLM Router for model calls across different providers.
+
+**Features:**
+- Automatic routing to appropriate provider
+- Streaming support
+- Response format enforcement (JSON, text)
+- Token counting and cost tracking
+- Timeout management
+- Error handling and fallbacks
+
+**Key Capabilities:**
+- **Prompt Caching:** 70-90% cost savings on repeated content (Anthropic)
+- **Context Management:** Intelligent context compression and token counting
+- **Tool Execution:** AgentPress tools orchestration
+- **Vision Support:** Image analysis capabilities
+- **Streaming:** Real-time response streaming
+
+**Usage Patterns:**
+
+**Agent Generation:**
+```python
+model = "openai/gpt-5-nano-2025-08-07"
+temperature = 0.7
+max_tokens = 2000
+response_format = {"type": "json_object"}
+```
+
+**File Editing:**
+```python
+model = "morph-v3-large"
+temperature = 0.0
+timeout = 30.0
+```
+
+**Voice Calls:**
+```python
+provider = "openai"
+model = "gpt-5-mini"
+temperature = 0.7
+```
+
+**Main Agent Operations:**
+```python
+model = "claude-sonnet-4-20250514" (via Bedrock)
+context_window = 200000
+supports_caching = true
+```
+
+---
+
