@@ -1,0 +1,1061 @@
+# Agent Pipelines Documentation
+
+This document describes all possible agent workflow pipelines in the Suna.so application, including data flow, prompt sequences, and tool orchestration.
+
+## Table of Contents
+- [Agent Creation Pipeline](#agent-creation-pipeline)
+- [File Editing Pipeline](#file-editing-pipeline)
+- [Voice Call Pipeline](#voice-call-pipeline)
+- [Agent Self-Configuration Pipeline](#agent-self-configuration-pipeline)
+- [Main Agent Execution Pipeline](#main-agent-execution-pipeline)
+
+---
+
+## Agent Creation Pipeline
+
+**Description:** Automated workflow for creating a new AI agent from natural language description, generating name, system prompt, icon, and colors in parallel.
+
+**Input:** User's natural language description of desired agent
+
+**Output:** Configured agent with:
+- Unique agent_id
+- Generated name (2-4 words)
+- Custom system prompt
+- Icon and color scheme
+
+### Pipeline Flow
+
+```
+User Description
+      |
+      v
+┌─────────────────────────────────────┐
+│  generate_agent_config_from_description  │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────┬─────────────────────────────┐
+│   PARALLEL EXECUTION        │                             │
+│                             │                             │
+v                             v                             │
+┌─────────────────────────┐   ┌─────────────────────────┐   │
+│ generate_agent_name_    │   │ generate_icon_and_      │   │
+│ and_prompt()            │   │ colors()                │   │
+│                         │   │                         │   │
+│ Model: gpt-5-nano       │   │ Model: gpt-5-nano       │   │
+│ Temperature: 0.7        │   │ Temperature: 0.7        │   │
+│ Max Tokens: 2000        │   │ Max Tokens: 4000        │   │
+│ Format: JSON            │   │ Format: JSON            │   │
+└─────────────────────────┘   └─────────────────────────┘   │
+      |                             |                        │
+      v                             v                        │
+┌─────────────────────────┐   ┌─────────────────────────┐   │
+│ Prompt:                 │   │ Prompt:                 │   │
+│ "You are an AI worker   │   │ "Select icon & colors   │   │
+│ configuration expert.   │   │ for AI agent based on   │   │
+│ Generate name and       │   │ name and description"   │   │
+│ system prompt."         │   │                         │   │
+│                         │   │ Available:              │   │
+│ Input: {description}    │   │ - 400+ Lucide icons     │   │
+│                         │   │ - 15 predefined colors  │   │
+└─────────────────────────┘   └─────────────────────────┘   │
+      |                             |                        │
+      v                             v                        │
+┌─────────────────────────┐   ┌─────────────────────────┐   │
+│ Output:                 │   │ Output:                 │   │
+│ {                       │   │ {                       │   │
+│   "name": "Research     │   │   "icon": "search",     │   │
+│            Assistant",  │   │   "background_color":   │   │
+│   "system_prompt":      │   │          "#6366F1",     │   │
+│   "Act as expert..."    │   │   "text_color":         │   │
+│ }                       │   │          "#FFFFFF"      │   │
+└─────────────────────────┘   └─────────────────────────┘   │
+      |                             |                        │
+      └─────────────────────────────┴────────────────────────┘
+                                    |
+                                    v
+                    ┌───────────────────────────────┐
+                    │  asyncio.gather()             │
+                    │  (Wait for both completions)  │
+                    └───────────────────────────────┘
+                                    |
+                                    v
+                    ┌───────────────────────────────┐
+                    │  Combine Results              │
+                    │  {                            │
+                    │    "name": "...",             │
+                    │    "system_prompt": "...",    │
+                    │    "icon_name": "...",        │
+                    │    "icon_color": "...",       │
+                    │    "icon_background": "..."   │
+                    │  }                            │
+                    └───────────────────────────────┘
+                                    |
+                                    v
+                    ┌───────────────────────────────┐
+                    │  Create Agent in Database     │
+                    │  - Generate agent_id          │
+                    │  - Store configuration        │
+                    │  - Enable default tools       │
+                    └───────────────────────────────┘
+                                    |
+                                    v
+                              ┌───────────┐
+                              │  Success  │
+                              │  Response │
+                              └───────────┘
+```
+
+### Data Flow
+
+**Step 1: User Input**
+```
+Input: "I need an agent that can help me with research and fact-checking"
+```
+
+**Step 2: Parallel LLM Calls**
+
+*Call 1 - Name & Prompt Generation:*
+```json
+{
+  "model": "openai/gpt-5-nano-2025-08-07",
+  "temperature": 0.7,
+  "max_tokens": 2000,
+  "response_format": {"type": "json_object"},
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an AI worker configuration expert. Generate a name and system prompt..."
+    },
+    {
+      "role": "user",
+      "content": "Generate name and system prompt for:\n\nI need an agent that can help me with research and fact-checking"
+    }
+  ]
+}
+```
+
+*Call 2 - Icon & Colors Selection:*
+```json
+{
+  "model": "openai/gpt-5-nano-2025-08-07",
+  "temperature": 0.7,
+  "max_tokens": 4000,
+  "response_format": {"type": "json_object"},
+  "messages": [
+    {
+      "role": "system",
+      "content": "Select appropriate icons and colors for AI agents...\nAvailable icons: [400+ Lucide icons]\nAvailable colors: [15 hex codes]"
+    },
+    {
+      "role": "user",
+      "content": "Select the most appropriate icon and color scheme for:\nDescription: I need an agent that can help me with research and fact-checking"
+    }
+  ]
+}
+```
+
+**Step 3: Response Processing**
+
+*Response 1:*
+```json
+{
+  "name": "Research Assistant",
+  "system_prompt": "Act as an expert research assistant. Help users find and analyze information. Always verify facts and cite sources clearly."
+}
+```
+
+*Response 2:*
+```json
+{
+  "icon": "search",
+  "background_color": "#6366F1",
+  "text_color": "#FFFFFF"
+}
+```
+
+**Step 4: Combined Configuration**
+```json
+{
+  "name": "Research Assistant",
+  "system_prompt": "Act as an expert research assistant. Help users find and analyze information. Always verify facts and cite sources clearly.",
+  "icon_name": "search",
+  "icon_color": "#FFFFFF",
+  "icon_background": "#6366F1"
+}
+```
+
+### Error Handling
+
+**Fallback Values:**
+- If name generation fails: "Custom Assistant"
+- If prompt generation fails: "Act as a helpful AI assistant. {description}"
+- If icon selection fails: "bot"
+- If color selection fails: "#6366F1" (background), "#FFFFFF" (text)
+
+**Validation:**
+- Icon names validated against RELEVANT_ICONS list
+- Color hex codes validated against frontend_colors list
+- Invalid selections trigger fallback to defaults
+
+---
+
+## File Editing Pipeline
+
+**Description:** AI-powered file editing using Morph-v3-large model for precise code modifications based on natural language instructions.
+
+**Input:**
+- Target file path
+- Natural language instructions
+- Code edit snippet with `// ... existing code ...` markers
+
+**Output:** Modified file with applied edits
+
+### Pipeline Flow
+
+```
+User Request: "Update function to handle error cases"
+      |
+      v
+┌─────────────────────────────────────┐
+│  Agent calls edit_file tool          │
+│  Parameters:                         │
+│  - target_file: "src/main.py"       │
+│  - instructions: "Add error handling"│
+│  - code_edit: "try/except block"     │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Read Current File Content           │
+│  - Load from sandbox filesystem      │
+│  - Validate file exists              │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Prepare Morph API Request           │
+│                                      │
+│  Format:                             │
+│  <instruction>{instructions}</instruction>
+│  <code>{file_content}</code>         │
+│  <update>{code_edit}</update>        │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Call Morph-v3-large Model           │
+│                                      │
+│  Model: morph-v3-large               │
+│  Temperature: 0.0 (deterministic)    │
+│  Timeout: 30 seconds                 │
+│  Provider: Morph API or OpenRouter   │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Response Processing                 │
+│  - Extract edited code               │
+│  - Remove markdown code blocks       │
+│  - Validate changes                  │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Write Updated Content               │
+│  - Upload to sandbox filesystem      │
+│  - Preserve file permissions         │
+└─────────────────────────────────────┘
+      |
+      v
+┌─────────────────────────────────────┐
+│  Return ToolResult                   │
+│  {                                   │
+│    "success": true,                  │
+│    "message": "File edited",         │
+│    "file_path": "src/main.py",       │
+│    "original_content": "...",        │
+│    "updated_content": "..."          │
+│  }                                   │
+└─────────────────────────────────────┘
+```
+
+### Data Flow Example
+
+**Step 1: Input**
+```python
+{
+  "target_file": "src/calculator.py",
+  "instructions": "Add error handling for division by zero",
+  "code_edit": """
+// ... existing code ...
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+// ... existing code ...
+"""
+}
+```
+
+**Step 2: File Content**
+```python
+# Original file content
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+def divide(a, b):
+    return a / b
+
+def multiply(a, b):
+    return a * b
+```
+
+**Step 3: Morph API Request**
+```xml
+<instruction>Add error handling for division by zero</instruction>
+<code>
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+def divide(a, b):
+    return a / b
+
+def multiply(a, b):
+    return a * b
+</code>
+<update>
+// ... existing code ...
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+// ... existing code ...
+</update>
+```
+
+**Step 4: Model Response**
+```python
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
+def multiply(a, b):
+    return a * b
+```
+
+**Step 5: Updated File**
+File is saved with the new content, preserving all unmodified sections.
+
+### Key Features
+
+**Intelligent Editing:**
+- Model understands `// ... existing code ...` markers
+- Preserves unchanged sections automatically
+- Handles multiple edits in single call
+- Context-aware code modifications
+
+**Fallback Mechanisms:**
+- TipTap document manual updates
+- Title/content/metadata field updates
+- Error message propagation
+
+**Validation:**
+- File existence check
+- Content comparison (detect no-op edits)
+- Markdown code block extraction
+
+---
+
+## Voice Call Pipeline
+
+**Description:** End-to-end workflow for making AI-powered phone calls with real-time transcription, safety validation, and call monitoring.
+
+**Input:**
+- Phone number (any format)
+- First message (greeting)
+- Optional system prompt
+
+**Output:**
+- Call initiated with call_id
+- Real-time transcript
+- Call completion report
+
+### Pipeline Flow
+
+```
+User: "Call +1-415-555-1234 and introduce yourself"
+      |
+      v
+┌──────────────────────────────────────────┐
+│  make_phone_call Tool Invocation          │
+│  Parameters:                              │
+│  - phone_number: "+1-415-555-1234"        │
+│  - first_message: "Hello, I'm calling..." │
+│  - system_prompt: (optional)              │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 1: Phone Number Normalization       │
+│                                           │
+│  normalize_phone_number()                 │
+│  - Parse with phonenumbers library        │
+│  - Try multiple strategies:               │
+│    * Explicit + prefix                    │
+│    * Regional parsing (US, GB, IN...)     │
+│    * 00 prefix conversion                 │
+│  - Validate: is_valid_number()            │
+│  - Extract country info                   │
+│                                           │
+│  Output:                                  │
+│  - E.164 format: "+14155551234"           │
+│  - Country code: "1"                      │
+│  - Country name: "United States"          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 2: Safety Validation                │
+│                                           │
+│  validate_call_safety()                   │
+│                                           │
+│  Check 1: Emergency Number Detection      │
+│  - Compare against EMERGENCY_NUMBERS      │
+│  - Match EMERGENCY_PATTERNS               │
+│  - Block: 911, 999, 112, 000, etc.       │
+│                                           │
+│  Check 2: Content Safety (First Message) │
+│  - Scan for PROHIBITED_KEYWORDS           │
+│    (illegal, scam, fraud, threat...)      │
+│  - Detect scam patterns:                  │
+│    * Urgent payment requests              │
+│    * Verification of sensitive info       │
+│    * Prize/lottery claims                 │
+│    * Government impersonation             │
+│                                           │
+│  Check 3: Content Safety (System Prompt) │
+│  - Same validation as first message       │
+│                                           │
+│  If any check fails → BLOCK CALL          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 3: Prompt Enhancement               │
+│                                           │
+│  Build Enhanced System Prompt:            │
+│                                           │
+│  1. Base Prompt (user or default)         │
+│     DEFAULT_SYSTEM_PROMPT:                │
+│     "You are a professional AI assistant  │
+│      making a phone call. Be natural,     │
+│      conversational, concise..."          │
+│                                           │
+│  2. + Country Context                     │
+│     "You are calling {country_name}       │
+│      (code +{country_code}).              │
+│      Be aware of cultural differences,    │
+│      time zones, language preferences."   │
+│                                           │
+│  3. + Safety Guidelines (MANDATORY)       │
+│     "ETHICAL GUIDELINES:                  │
+│      - NEVER request SSN, passwords,      │
+│        credit cards, bank accounts        │
+│      - NEVER discuss illegal activities   │
+│      - NEVER impersonate government       │
+│      - NEVER create urgency               │
+│      - NEVER request payments             │
+│      - Be honest about being AI"          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 4: VAPI Configuration               │
+│                                           │
+│  vapi_config.get_assistant_config()       │
+│                                           │
+│  {                                        │
+│    "firstMessage": enhanced_first_msg,    │
+│    "model": {                             │
+│      "provider": "openai",                │
+│      "model": "gpt-5-mini",               │
+│      "temperature": 0.7,                  │
+│      "messages": [{                       │
+│        "role": "system",                  │
+│        "content": enhanced_system_prompt  │
+│      }]                                   │
+│    },                                     │
+│    "voice": {                             │
+│      "provider": "playht",                │
+│      "voiceId": "jennifer-playht"         │
+│    },                                     │
+│    "transcriber": {                       │
+│      "provider": "deepgram",              │
+│      "model": "nova-2",                   │
+│      "language": "en",                    │
+│      "smartFormat": true                  │
+│    },                                     │
+│    "maxDurationSeconds": 600              │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 5: Initiate Call via VAPI           │
+│                                           │
+│  POST https://api.vapi.ai/call/phone      │
+│  {                                        │
+│    "phoneNumberId": VAPI_PHONE_NUMBER_ID, │
+│    "customer": {                          │
+│      "number": "+14155551234"             │
+│    },                                     │
+│    "assistant": assistant_config          │
+│  }                                        │
+│                                           │
+│  Response:                                │
+│  {                                        │
+│    "id": "call_abc123...",                │
+│    "status": "queued",                    │
+│    "createdAt": "2025-01-..."             │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 6: Database Recording               │
+│                                           │
+│  Store in vapi_calls table:               │
+│  {                                        │
+│    "call_id": "call_abc123...",           │
+│    "agent_id": current_agent_id,          │
+│    "thread_id": current_thread_id,        │
+│    "phone_number": "+14155551234",        │
+│    "direction": "outbound",               │
+│    "status": "queued",                    │
+│    "transcript": [],                      │
+│    "started_at": timestamp                │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  STEP 7: Thread Message                   │
+│                                           │
+│  Add message to conversation:             │
+│  "📞 Initiating call to +14155551234      │
+│   🌍 Country: United States               │
+│   Call ID: call_abc1...                   │
+│   The conversation will appear here       │
+│   in real-time."                          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Return Success                           │
+│  {                                        │
+│    "call_id": "call_abc123...",           │
+│    "status": "queued",                    │
+│    "phone_number": "+14155551234",        │
+│    "country": "United States",            │
+│    "next_action": "MONITOR_CALL",         │
+│    "instructions": "Use                   │
+│     wait_for_call_completion..."          │
+│  }                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Agent calls wait_for_call_completion     │
+│  Parameters:                              │
+│  - call_id: "call_abc123..."              │
+│  - check_interval: 2 seconds              │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  MONITORING LOOP (Every 2 seconds)        │
+│                                           │
+│  Query vapi_calls table:                  │
+│  - Check status (queued → ringing →      │
+│                   in-progress → ended)    │
+│  - Get transcript updates                 │
+│                                           │
+│  If new transcript messages:              │
+│  - Stream to conversation thread:         │
+│    "🤖 AI: Hello, I'm calling..."         │
+│    "👤 Caller: Hi, who is this?"          │
+│    "🤖 AI: I'm an AI assistant..."        │
+│                                           │
+│  Continue until status ∈ [ended,          │
+│   completed, failed, error]               │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  CALL COMPLETION                          │
+│                                           │
+│  Calculate metrics:                       │
+│  - Duration: 127 seconds                  │
+│  - Cost: $0.10 (base + trans + voice +    │
+│           model costs)                    │
+│  - Credits: $0.10 * TOKEN_PRICE_MULT      │
+│                                           │
+│  Add completion message:                  │
+│  "📞 Call Completed                       │
+│   Status: ended                           │
+│   Duration: 127 seconds                   │
+│   Credits Used: $0.4000"                  │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Return Final ToolResult                  │
+│  {                                        │
+│    "call_id": "call_abc123...",           │
+│    "final_status": "ended",               │
+│    "duration_seconds": 127,               │
+│    "transcript_messages": 8,              │
+│    "cost": 0.10,                          │
+│    "message": "Call completed..."         │
+│  }                                        │
+└──────────────────────────────────────────┘
+```
+
+### Data Flow Example
+
+**Initial Request:**
+```python
+{
+  "phone_number": "415-555-1234",
+  "first_message": "Hello, I'm calling from Acme Corp to discuss your recent inquiry",
+  "system_prompt": "You are a friendly customer service representative"
+}
+```
+
+**After Normalization:**
+```python
+{
+  "normalized_phone": "+14155551234",
+  "country_code": "1",
+  "country_name": "United States"
+}
+```
+
+**Enhanced System Prompt:**
+```
+You are a friendly customer service representative
+
+IMPORTANT: You are calling a phone number in United States (country code +1). Please be aware of potential cultural differences, time zones, and language preferences.
+
+ETHICAL GUIDELINES (MANDATORY):
+- NEVER request sensitive personal information (SSN, passwords, credit card numbers, bank accounts, PINs)
+- NEVER discuss illegal activities, threats, or emergency services
+- NEVER impersonate government agencies, law enforcement, or financial institutions
+- NEVER create urgency to manipulate the recipient into taking immediate action
+- NEVER request payments, transfers, or financial transactions
+- Be respectful, honest, and transparent about being an AI assistant
+```
+
+**Live Transcript Stream:**
+```
+[00:01] 🤖 AI: Hello, I'm calling from Acme Corp to discuss your recent inquiry
+[00:05] 👤 Caller: Oh yes, I was asking about your pricing
+[00:08] 🤖 AI: Of course! I'd be happy to help with that
+[00:12] 👤 Caller: What are your current rates?
+[00:15] 🤖 AI: Our basic plan starts at $29 per month
+...
+[02:07] 👤 Caller: Great, thank you for the information
+[02:10] 🤖 AI: You're welcome! Have a great day
+[02:12] Call ended
+```
+
+### Safety Features
+
+**Automatic Blocking:**
+- Emergency numbers (911, 999, 112, etc.)
+- Content with prohibited keywords
+- Scam pattern detection
+- Sensitive information requests
+
+**Real-time Monitoring:**
+- Call status updates every 2 seconds
+- Live transcript streaming
+- Error detection and handling
+- Automatic timeout after 1 hour
+
+**Cost Control:**
+- Per-minute billing: $0.10/minute total
+  - Base: $0.05/min
+  - Transcription: $0.01/min
+  - Voice: $0.02/min
+  - Model: $0.02/min
+- Maximum duration: 10 minutes (configurable)
+- Cost tracking and reporting
+
+---
+
+## Main Agent Execution Pipeline
+
+**Description:** Core workflow for processing user requests through the Suna.so agent system, from message reception to response generation with tool execution and context management.
+
+**Input:** User message/request
+
+**Output:** Agent response with executed tool results
+
+### High-Level Pipeline
+
+```
+User Message
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Message Reception                        │
+│  - Thread ID context                      │
+│  - Agent ID context                       │
+│  - Account ID context                     │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Load Agent Configuration                 │
+│  - System prompt (2300+ lines)            │
+│  - Agent builder prompt (if applicable)   │
+│  - Available tools                        │
+│  - Model configuration                    │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Context Management                       │
+│  - Load conversation history              │
+│  - Apply prompt caching (if supported)    │
+│  - Compress context if needed             │
+│  - Token counting                         │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Prepare Messages Array                   │
+│  [                                        │
+│    {                                      │
+│      "role": "system",                    │
+│      "content": SYSTEM_PROMPT +           │
+│                 AGENT_BUILDER_PROMPT,     │
+│      "cache_control": {"type": "ephemeral"}│
+│    },                                     │
+│    ... conversation history ...           │
+│    {                                      │
+│      "role": "user",                      │
+│      "content": current_user_message      │
+│    }                                      │
+│  ]                                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  LLM API Call                             │
+│                                           │
+│  Model: claude-sonnet-4-20250514          │
+│  Provider: AWS Bedrock                    │
+│  Context Window: 200,000 tokens           │
+│  Max Output: 16,384 tokens                │
+│  Temperature: varies by use case          │
+│  Tools: AgentPress tool definitions       │
+│  Streaming: true                          │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Response Processing                      │
+│                                           │
+│  IF response contains tool calls:         │
+│  ├─> Execute tools in sequence            │
+│  │   (or parallel if independent)         │
+│  ├─> Collect tool results                 │
+│  └─> Recursive LLM call with results      │
+│                                           │
+│  IF response is text only:                │
+│  └─> Return response to user              │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Tool Execution (if needed)               │
+│                                           │
+│  For each tool call:                      │
+│  1. Validate tool exists                  │
+│  2. Parse parameters                      │
+│  3. Execute tool function                 │
+│  4. Collect ToolResult                    │
+│  5. Format for next LLM call              │
+│                                           │
+│  Examples:                                │
+│  - sb_files_tool: File operations         │
+│  - sb_shell_tool: Command execution       │
+│  - browser_tool: Web automation           │
+│  - web_search_tool: Internet search       │
+│  - designer_create_or_edit: Design gen    │
+│  - image_edit_or_generate: Image gen      │
+│  - make_phone_call: Voice calls           │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Continue Until Complete                  │
+│                                           │
+│  Loop:                                    │
+│  - LLM generates tool calls               │
+│  - Tools execute                          │
+│  - Results feed back to LLM               │
+│  - Repeat until text-only response        │
+│                                           │
+│  Termination conditions:                  │
+│  - Agent returns final text response      │
+│  - Max iterations reached                 │
+│  - Error occurs                           │
+│  - User interrupts                        │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Response Delivery                        │
+│  - Stream response to user                │
+│  - Update conversation thread             │
+│  - Calculate token usage                  │
+│  - Track costs                            │
+│  - Log metrics                            │
+└──────────────────────────────────────────┘
+      |
+      v
+┌──────────────────────────────────────────┐
+│  Post-Processing                          │
+│  - Save message to database               │
+│  - Update thread metadata                 │
+│  - Trigger background tasks (if any)      │
+│  - Cache cleanup                          │
+└──────────────────────────────────────────┘
+```
+
+### Detailed Flow with Example
+
+**User Request:**
+```
+"Create a Python script that analyzes CSV data and generates a report"
+```
+
+**Step 1: Context Loading**
+```python
+# Load conversation history
+messages = [
+    {
+        "role": "system",
+        "content": SYSTEM_PROMPT,  # 2300+ lines of agent instructions
+        "cache_control": {"type": "ephemeral"}  # Cache for cost savings
+    }
+]
+
+# Add conversation history
+previous_messages = load_thread_history(thread_id)
+messages.extend(previous_messages)
+
+# Add current user message
+messages.append({
+    "role": "user",
+    "content": "Create a Python script that analyzes CSV data and generates a report"
+})
+```
+
+**Step 2: First LLM Call**
+```python
+# Call to Claude Sonnet 4.5
+response = await bedrock_client.invoke_model(
+    model="claude-sonnet-4-20250514",
+    messages=messages,
+    max_tokens=16384,
+    tools=agentpress_tools,  # All available tools
+    stream=True
+)
+```
+
+**Step 3: Agent Plans & Uses Tools**
+
+*LLM Response (First Turn):*
+```json
+{
+  "role": "assistant",
+  "content": "I'll create a Python script for CSV analysis. Let me start by creating the file.",
+  "tool_calls": [
+    {
+      "id": "tool_call_1",
+      "type": "function",
+      "function": {
+        "name": "create_file",
+        "arguments": {
+          "file_path": "analyze_csv.py",
+          "file_contents": "import pandas as pd\nimport matplotlib.pyplot as plt\n\ndef analyze_csv(filename):\n    df = pd.read_csv(filename)\n    # Analysis code...\n    return report"
+        }
+      }
+    }
+  ]
+}
+```
+
+**Step 4: Tool Execution**
+```python
+# Execute create_file tool
+tool_result = await sb_files_tool.create_file(
+    file_path="analyze_csv.py",
+    file_contents="..."
+)
+
+# Tool result
+{
+    "success": True,
+    "output": "File 'analyze_csv.py' created successfully."
+}
+```
+
+**Step 5: Second LLM Call (with tool results)**
+```python
+messages.append({
+    "role": "assistant",
+    "content": "I'll create a Python script...",
+    "tool_calls": [...]
+})
+
+messages.append({
+    "role": "user",
+    "tool_call_id": "tool_call_1",
+    "content": tool_result.output
+})
+
+# Another LLM call
+response = await bedrock_client.invoke_model(...)
+```
+
+*LLM Response (Second Turn):*
+```json
+{
+  "role": "assistant",
+  "content": "Great! I've created the Python script. Now let me create a sample CSV file for testing.",
+  "tool_calls": [
+    {
+      "id": "tool_call_2",
+      "type": "function",
+      "function": {
+        "name": "create_file",
+        "arguments": {
+          "file_path": "sample_data.csv",
+          "file_contents": "name,age,city\nAlice,30,NYC\nBob,25,LA\n..."
+        }
+      }
+    }
+  ]
+}
+```
+
+**Step 6: Continue Loop**
+- Execute create sample CSV
+- LLM may test the script using sb_shell_tool
+- Generate report
+- Final response to user
+
+**Step 7: Final Response**
+```json
+{
+  "role": "assistant",
+  "content": "I've created a complete CSV analysis solution for you:\n\n1. **analyze_csv.py**: Main analysis script with pandas\n2. **sample_data.csv**: Test data\n\nThe script includes:\n- Data loading and validation\n- Statistical analysis\n- Visualization generation\n- Report export\n\nYou can run it with: `python analyze_csv.py sample_data.csv`"
+}
+```
+
+### Prompt Caching Strategy
+
+**Cached Content (70-90% cost savings):**
+```python
+{
+    "role": "system",
+    "content": SYSTEM_PROMPT,  # 2300+ lines - CACHED
+    "cache_control": {"type": "ephemeral"}
+}
+
+# First request: Full cost
+# Subsequent requests within 5 minutes: 90% discount on cached portion
+```
+
+**Token Costs:**
+- System prompt: ~50,000 tokens
+- First request: $3.00/1M input tokens = $0.15
+- Cached requests: $0.30/1M cached tokens = $0.015 (90% savings!)
+
+### Tool Orchestration Patterns
+
+**Sequential Execution:**
+```
+User: "Create file, then run tests"
+  ├─> create_file("test.py", "...")
+  └─> sb_shell_tool("pytest test.py")
+```
+
+**Parallel Execution:**
+```
+User: "Search for Python tutorials and Node.js tutorials"
+  ├─> web_search("Python tutorials") ─┐
+  └─> web_search("Node.js tutorials") ─┴─> Combine results
+```
+
+**Conditional Execution:**
+```
+User: "Try to read config.json, if it doesn't exist, create it"
+  ├─> read_file("config.json")
+  │   └─> If fails:
+  │       └─> create_file("config.json", default_config)
+```
+
+**Multi-turn Planning:**
+```
+Turn 1: Agent analyzes request, breaks down into subtasks
+Turn 2: Execute task 1 (file creation)
+Turn 3: Execute task 2 (code testing)
+Turn 4: Execute task 3 (refinement)
+Turn 5: Final response with summary
+```
+
+### Context Management
+
+**Compression Triggers:**
+- Thread exceeds 150,000 tokens
+- Approaching model's context limit
+- Performance optimization needed
+
+**Compression Strategy:**
+- Keep recent messages (last 10)
+- Summarize old conversations
+- Preserve critical information
+- Maintain prompt cache
+
+**Token Budget Allocation:**
+```
+Total: 200,000 tokens
+- System prompt: 50,000 (cached)
+- Agent builder prompt: 10,000 (cached)
+- Conversation history: 100,000
+- Tool results: 20,000
+- Reserved for response: 20,000
+```
+
+---
+
